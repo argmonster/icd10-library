@@ -38,15 +38,3 @@ mis.deploy.usc()
    .then(mis.script.uninstallcompile);
 });
 
-//build and deploy the parmfiles
-console.log('parms');
-mis.parm.fromflatfile('parm/dx10.ignore')
-.then(mis.parm.tofile.bind(mis, 'build/DX10.parm'))
-.then(mis.parm.fromflatfile.bind(mis, 'parm/dx10entr.ignore'))
-.then(mis.parm.tofile.bind(mis, 'build/DX10ENTR.parm'))
-.then(mis.deploy.parm);
-
-//deploy the resources
-mis.deploy.dir('./Resources/', options.webname + 'our_images/', 'gif', true);
-mis.deploy.dir('./Resources/oatmeal_tumbeasts/', options.webname + 'our_images/', 'png', true);
-
