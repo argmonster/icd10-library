@@ -1108,6 +1108,8 @@ client_id   is x
 dx_rec      is uid
 void_date   is d
 
+void_reason is x
+
 if dx_rec !dp or client_id !dp then
    voidClientDx = 99
    return
@@ -1124,7 +1126,7 @@ if "l_snapLibMain":voidReport(c.dx10.snapid, ,void_reason) > 0 then
    return
 endif
 
-c.dx10.rh[eff] = "12/31/1979"
+c.dx10.rh[effd] = "12/31/1979"
 c.dx10.stat = "V"
 c.dx10.expire = void_date
 c.dx10.comment = void_reason
