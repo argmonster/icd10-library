@@ -647,7 +647,7 @@ function getclientdx(client_id, as_of_date, dx_rec, dx_date, dx_time, dx_primary
 
  $dblock()
  getClientDx = $dbread(2,client_id,dx10_dstlist)
- do while c.dx10.dt > as_of_date
+ do while c.dx10.dt > as_of_date or c.dx10.stat = "V"
   getClientDx = $dbreadnextdst(2,client_id,dx10_dstlist) 
  enddo
  fillclientdx(dx_rec, dx_date, dx_time, dx_primary, dx_reason, 
@@ -698,7 +698,7 @@ public dynamic function getUnbatchCltDx(client_id, as_of_date, dx_rec, dx_date, 
    ' we want to find the earliest unbatched layer
    $dblock()
    getUnbatchCltDx = $dbreadnextdst(2, client_id, dx10_dstlist)
-   do while c.dx10.caredt !dp and getUnbatchCltDx < 2
+   do while (c.dx10.caredt !dp or c.dx10.stat = "V") and getUnbatchCltDx < 2
       'if the next record is unbatched - clear the previous one
       $clear(dx_rec, dx_date, dx_time, dx_primary, dx_reason, 
          dx10_code[], dx_rank[], dx_axis[], dx9_code[], dx_batchdt,dx_cat[],
@@ -964,7 +964,7 @@ public dynamic function getClientAxis4(client_id, as_of_date, dx_rec, dx_date, d
    as_of_date = $today
   endif
   getClientAxis4 = $dbread(2,client_id,dx10_dstlist)
-  do while c.dx10.dt > as_of_date
+  do while c.dx10.dt > as_of_date or c.dx10.stat = "V"
    getClientAxis4 = $dbreadnextdst(2,client_id,dx10_dstlist) 
   enddo 
  endif
@@ -1000,7 +1000,7 @@ function getClientGaf(client_id, as_of_date, dx_rec, dx_date, dx_gaf_cur, dx_gaf
     as_of_date = $today
    endif
    getClientGaf = $dbread(2,client_id,dx10_dstlist)
-   do while c.dx10.dt > as_of_date
+   do while c.dx10.dt > as_of_date or c.dx10.stat = "V"
     getClientGaf = $dbreadnextdst(2,client_id,dx10_dstlist) 
    enddo 
  endif
@@ -1040,7 +1040,7 @@ function getClientAamd(client_id, as_of_date, dx_rec, dx_date, dx_aamd_date, dx_
     as_of_date = $today
    endif
    getClientAamd = $dbread(2,client_id,dx10_dstlist)
-   do while c.dx10.dt > as_of_date
+   do while c.dx10.dt > as_of_date or c.dx10.stat = "V"
     getClientAamd = $dbreadnextdst(2,client_id,dx10_dstlist) 
    enddo 
  endif
@@ -1072,7 +1072,7 @@ dynamic function getClientIq(client_id, as_of_date, dx_rec, dx_date, dx_iq, dx_i
     as_of_date = $today
    endif
    getClientIq = $dbread(2,client_id,dx10_dstlist)
-   do while c.dx10.dt > as_of_date
+   do while c.dx10.dt > as_of_date or c.dx10.stat = "V"
     getClientIq = $dbreadnextdst(2,client_id,dx10_dstlist) 
    enddo 
  endif
@@ -1102,6 +1102,36 @@ public dynamic function MarkAsBatched(client_id, batchdate, record) is i
  MarkAsBatched = $dbupdateuid(record, 2, client_id, c.dx10.rh, c.dx10.caredt)
  $dbunlock()
 end MarkAsBatched
+
+public dynamic function voidClientDx(client_id, dx_rec, void_date) is i
+client_id   is x
+dx_rec      is uid
+void_date   is d
+
+if dx_rec !dp or client_id !dp then
+   voidClientDx = 99
+   return
+endif
+
+if void_date !dp then
+   void_date = $today
+endif
+
+voidClientDx = $dbreaduid(dx_rec, 2, client_id, dx10_dstlist)
+
+if "l_snapLibMain":voidReport(c.dx10.snapid, ,void_reason) > 0 then
+   voidClientDx = 88
+   return
+endif
+
+c.dx10.rh[eff] = "12/31/1979"
+c.dx10.stat = "V"
+c.dx10.expire = void_date
+c.dx10.comment = void_reason
+$dblock()
+voidClientDx = $dbupdateuid(dx_rec, 2, client_id, c.dx10.rh, c.dx10.stat, c.dx10.expire, c.dx10.comment)
+$dbunlock()
+end voidClientDx
 
 function DX_9Code_Query(diag_code,legacy_axis,9DOTTED,results[],text) is null
  diag_code   is x
