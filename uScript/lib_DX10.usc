@@ -61,6 +61,7 @@ public dynamic function putClientDx(dx_rec, clientid,
    c_dx10_a4_supgrp, c_dx10_a4_socenv, c_dx10_a4_edu, c_dx10_a4_occ, c_dx10_a4_housng, c_dx10_a4_eco, c_dx10_a4_health, c_dx10_a4_legal, c_dx10_a4_psyenv, c_dx10_a4_none, c_dx10_a5_gaf,
    c_dx10_curr_abl, c_dx10_pot_abl,
    c_dx10_iq_score, c_dx10_iq_date, c_dx10_iq_test, c_dx10_sq_score, c_dx10_sq_date, c_dx10_sq_test, 
+   c_dx10_snapid,
    isConverted) is b
 
 dx_rec               is uid
@@ -98,6 +99,7 @@ c_dx10_sq_score      is x
 c_dx10_sq_date       is x
 c_dx10_sq_test       is x
 c_dx10_comment       is x
+c_dx10_snapid        is x
 isConverted          is x
 
 bad_char[]           is x
@@ -112,6 +114,15 @@ index                is b
 
  if isConverted !dp then
     isConverted = "N"
+ endif
+
+ if recentrydate !dp then
+    recentrydate = $today
+    recentrytime = $timenow
+ endif
+
+ if recentrytime !dp then
+    recentrytime = $timenow
  endif
 
  if c_dx10_comment dp
@@ -154,6 +165,7 @@ index                is b
  c.dx10.sq.date   = c_dx10_sq_date
  c.dx10.sq.test   = c_dx10_sq_test
  c.dx10.comment   = c_dx10_comment  
+ c.dx10.snapid    = c_dx10_snapid
  c.dx10.converted = isConverted
 
  index = 0
@@ -1441,19 +1453,140 @@ endif
 
 voidClientDx = $dbreaduid(dx_rec, 2, client_id, dx10_dstlist)
 
-if "l_snapLibMain":voidReport(c.dx10.snapid, ,void_reason) > 0 then
+'if "l_snapLibMain":voidReport(c.dx10.snapid, ,void_reason) > 0 then
+'   voidClientDx = 88
+'   return
+'endif
+
+void_reason = voiddxdoc(c.dx10.snapid)
+
+if void_reason !dp then
+   'user canceled
    voidClientDx = 88
    return
 endif
+
+voidClientDx = voiddxrec(dx_rec, client_id, void_date, void_reason)
+end voidClientDx
+
+public dynamic function updateClientDx(dx_rec, clientid, 
+   effdate, staffid, recdate, rectime, recentrydate, recentrytime, recexpdate,
+   c_dx10_reason, c_dx10_stat, c_dx10_primary_a,
+   c_dx10_uniq[], c_dx10_comment,
+   10dotted, 9dotted,
+   c_dx10_a4_supgrp, c_dx10_a4_socenv, c_dx10_a4_edu, c_dx10_a4_occ, c_dx10_a4_housng, c_dx10_a4_eco, c_dx10_a4_health, c_dx10_a4_legal, c_dx10_a4_psyenv, c_dx10_a4_none, c_dx10_a5_gaf,
+   c_dx10_curr_abl, c_dx10_pot_abl,
+   c_dx10_iq_score, c_dx10_iq_date, c_dx10_iq_test, c_dx10_sq_score, c_dx10_sq_date, c_dx10_sq_test, 
+   c_dx10_snapid,
+   isConverted) is b
+
+dx_rec               is uid
+clientid             is x
+effdate              is d
+recdate              is d
+staffid              is x
+rectime              is t
+recentrydate         is d
+recentrytime         is t
+c_dx10_reason        is x
+c_dx10_stat          is x
+recexpdate           is d
+c_dx10_primary_a     is x
+c_dx10_uniq[]        is x
+10dotted             is x
+9dotted              is x
+c_dx10_a4_supgrp     is x
+c_dx10_a4_socenv     is x
+c_dx10_a4_edu        is x
+c_dx10_a4_occ        is x
+c_dx10_a4_housng     is x
+c_dx10_a4_eco        is x
+c_dx10_a4_health     is x
+c_dx10_a4_legal      is x
+c_dx10_a4_psyenv     is x
+c_dx10_a4_none       is x
+c_dx10_a5_gaf        is x
+c_dx10_curr_abl      is x
+c_dx10_pot_abl       is x
+c_dx10_iq_score      is x
+c_dx10_iq_date       is x
+c_dx10_iq_test       is x
+c_dx10_sq_score      is x
+c_dx10_sq_date       is x
+c_dx10_sq_test       is x
+c_dx10_comment       is x
+c_dx10_snapid        is x
+isConverted          is x
+
+void_date            is d
+void_reason          is x
+
+'load up the current record
+updateClientdx = $dbreaduid(dx_rec, 2, clientid, dx10_dstlist)
+
+'Void it off as changed
+void_reason = "This record was changed by staff id " + staffid + ". "
+if c_dx10_snapid dp then
+   void_reason += "Please see snap id: " + c_dx10_snapid + " for the updates."
+endif
+
+voiddxdoc(c.dx10.snapid, void_reason, c_dx10_snapid)
+
+void_date = recentrydate
+
+updateClientDx = voiddxrec(dx_rec, clientid, void_date, void_reason)
+
+'add the new record
+putClientDx(clientid, 
+   effdate, staffid, recdate, rectime, recentrydate, recentrytime, recexpdate,
+   c_dx10_reason, c_dx10_stat, c_dx10_primary_a,
+   c_dx10_uniq[], c_dx10_comment,
+   10dotted, 9dotted,
+   c_dx10_a4_supgrp, c_dx10_a4_socenv, c_dx10_a4_edu, c_dx10_a4_occ, c_dx10_a4_housng, c_dx10_a4_eco, c_dx10_a4_health, c_dx10_a4_legal, c_dx10_a4_psyenv, c_dx10_a4_none, c_dx10_a5_gaf,
+   c_dx10_curr_abl, c_dx10_pot_abl,
+   c_dx10_iq_score, c_dx10_iq_date, c_dx10_iq_test, c_dx10_sq_score, c_dx10_sq_date, c_dx10_sq_test, 
+   c_dx10_snapid,
+   isConverted)
+end updateClientDx
+
+private function voiddxdoc(snapid, reason, newsnap) is x
+snapid      is x
+reason      is x
+newsnap     is x
+
+docid       is x
+nextdocid   is x
+
+docid = "l_snapLibMain":docidtoIRMSid(snapid)
+nextdocid = "l_snapLibMain":docidtoIRMSid(newsnap)
+
+if reason dp then
+   "l_snapLibMain":ReportVoided(docid, "V", "99", reason, nextdocid)
+else
+   if "l_snapLibMain":voidReport(snapid, ,reason) > 0 then
+      $clear(reason)
+   endif
+endif
+voiddxdoc = reason
+
+end voiddxdoc
+
+private function voiddxrec(dx_rec, client_id, void_date, void_reason) is b
+
+dx_rec      is uid
+client_id   is x
+void_date   is d
+void_reason is x
 
 c.dx10.rh[effd] = "12/31/1979"
 c.dx10.stat = "V"
 c.dx10.expire = void_date
 c.dx10.comment = void_reason
 $dblock()
-voidClientDx = $dbupdateuid(dx_rec, 2, client_id, c.dx10.rh, c.dx10.stat, c.dx10.expire, c.dx10.comment)
+voiddxrec = $dbupdateuid(dx_rec, 2, client_id, c.dx10.rh, c.dx10.stat, c.dx10.expire, c.dx10.comment)
 $dbunlock()
-end voidClientDx
+
+end voiddxrec
 
 function DX_9Code_Query(diag_code,legacy_axis,9DOTTED,results[],text) is null
  diag_code   is x
