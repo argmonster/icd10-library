@@ -27,8 +27,9 @@ var options = {
 
 var mis = util(options);
 
-//test batch with a fake client
-mis.script.runonce('./tests/lib-batch-test.usc',['000100'])
+//test with a fake client
+mis.script.runonce('./tests/lib-batch-test.usc',['000100']);
+.then(mis.script.runonce.bind(mis,'./tests/lib-void-test.usc'))
 .then(mis.script.runonce.bind(mis,'./tests/lib-bill-qual-test.usc'))
 .then(mis.script.runonce.bind(mis,'./tests/lib-put-test.usc'))
 .then(mis.script.runonce.bind(mis,'./tests/lib-put-ax4-test.usc'))
@@ -37,4 +38,6 @@ mis.script.runonce('./tests/lib-batch-test.usc',['000100'])
 .then(mis.script.runonce.bind(mis,'./tests/lib-put-iqsq-test.usc'))
 .then(mis.script.runonce.bind(mis,'./tests/lib-put-id-test.usc'))
 .then(mis.script.runonce.bind(mis,'./tests/lib-get-bill-test.usc'))
+
+
 

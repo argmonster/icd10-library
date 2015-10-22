@@ -698,7 +698,6 @@ index                is b
  clearDsts()
 
  c.dx10.rh[effd]  = effdate
- dx_rec           = c.dx10.rh[uid] 
  c.dx10.staff     = staffid
  c.dx10.dt        = recdate
  c.dx10.time      = rectime
@@ -738,6 +737,8 @@ index                is b
  $dblock()
  putClientDx =  $dbpoint(2, clientid, c.dx10.rh)
  putClientDx =  $dbadddst(2, clientid, dx10_dstlist)
+ dx_rec           = c.dx10.rh[uid] 
+ $dbunlock()
 
 end putClientDx
 
