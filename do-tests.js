@@ -37,7 +37,7 @@ mis.script.runonce('./tests/lib-batch-test.usc',['000100'])
 .then(mis.script.runonce.bind(mis,'./tests/lib-put-iqsq-test.usc'))
 .then(mis.script.runonce.bind(mis,'./tests/lib-put-id-test.usc'))
 .then(mis.script.runonce.bind(mis,'./tests/lib-get-bill-test.usc'))
-.then(mis.script.runonce.bind(mis,'./tests/lib-void-test.usc'))
+//.then(mis.script.runonce.bind(mis,'./tests/lib-void-test.usc'))
 //mis.script.runonce('./tests/lib-void-test.usc')
 //only install the void test because it requires user interaction for testing
 .then(mis.script.install.bind(mis, './tests/lib-void-test.usc'))

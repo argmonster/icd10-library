@@ -1114,7 +1114,7 @@ dx_rec      is uid
 void_date   is d
 
 void_reason is x
-void_text   is x
+void_code   is x
 
 if dx_rec !dp or client_id !dp then
    voidClientDx = 99
@@ -1127,14 +1127,9 @@ endif
 
 voidClientDx = $dbreaduid(dx_rec, 2, client_id, dx10_dstlist)
 
-'if "l_snapLibMain":voidReport(c.dx10.snapid, ,void_reason) > 0 then
-'   voidClientDx = 88
-'   return
-'endif
+$clear(void_reason, void_code)
 
-$clear(void_reason, void_text)
-
-void_reason = voiddxdoc(c.dx10.snapid, void_reason, void_text)
+void_reason = voiddxdoc(c.dx10.snapid, void_reason, void_code)
 
 if void_reason !dp then
    'user canceled
@@ -1142,7 +1137,7 @@ if void_reason !dp then
    return
 endif
 
-voidClientDx = voiddxrec(dx_rec, client_id, void_date, void_text)
+voidClientDx = voiddxrec(dx_rec, client_id, void_date, void_reason)
 end voidClientDx
 
 public dynamic function updateClientDx(dx_rec, clientid, 
@@ -1208,9 +1203,9 @@ void_reason = "This record was changed by staff id " + staffid + ". "
 if c_dx10_snapid dp then
    void_reason += "Please see snap id: " + c_dx10_snapid + " for the updates."
 endif
-void_code = "9010"
+'void_code = "9010"
 
-voiddxdoc(c.dx10.snapid, void_code, void_reason, c_dx10_snapid)
+voiddxdoc(c.dx10.snapid, void_reason, void_code, c_dx10_snapid)
 
 void_date = recentrydate
 
@@ -1233,10 +1228,10 @@ dx_rec = new_rec
 $allowupdate(dx_rec)
 end updateClientDx
 
-private function voiddxdoc(snapid, reason, text, newsnap) is x
+private function voiddxdoc(snapid, reason, code, newsnap) is x
 snapid      is x
 reason      is x
-text        is x
+code        is x
 newsnap     is x
 
 docid       is x
@@ -1244,19 +1239,21 @@ nextdocid   is x
 
 docid = snapid
 docid = "l_snapLibMain":docidtoIRMSid(snapid)
-'nextdocid = "l_snapLibMain":docidtoIRMSid(newsnap)
+nextdocid = "l_snapLibMain":docidtoIRMSid(newsnap)
 
 'docid = snapid
-reason = reason
-nextdocid = newsnap
+'reason = reason
+'nextdocid = newsnap
+
+'silent void if we already have the reason
 if reason dp then
    "l_snapLibMain":ReportVoided(docid, "V", reason, "9010", nextdocid)
 else
-   if "l_snapLibMain":voidReport(docid, ,reason, text) > 0 then
-      $clear(reason)
+   if "l_snapLibMain":voidReport(docid, , code, , reason) > 0 then
+      $clear(code, reason)
    endif
 endif
-$allowupdate(text)
+$allowupdate(code)
 voiddxdoc = reason
 
 end voiddxdoc
