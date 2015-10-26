@@ -1,4 +1,4 @@
-start lib-void-test()
+start lib-update-test()
 
 client is x
 
@@ -103,6 +103,8 @@ doc-id is x
 rc = $putirmsdoc(doc-id,temp_file,2,clientid,irms_form,"DX10","1869",
          create-date, create-time, "text/x-cmhc-snapshot", doc-desc)
 
+doc-id = $parse(doc-id, 1, ".")
+
 $infomsg1 = $format(doc-id, "doc id: ~~~~~~~~~~~~~~~~~~~~~")
 
 rm-file is x
@@ -163,6 +165,7 @@ isConverted      = "N"
 rc = $putfile("<center>this is a NEW test</center>", temp_file)
 rc = $putirmsdoc(doc-id,temp_file,2,clientid,irms_form,"DX10","1869",
          create-date, create-time, "text/x-cmhc-snapshot", doc-desc)
+doc-id = $parse(doc-id, 1, ".")
 rm-file = "rm " + temp_file
 rc = $unix(rm-file)
 
@@ -189,13 +192,13 @@ else
 endif
 
 'clean up the reg
-c.dx10.rh is h
-c.dx10.dt is d
-$dblock()
-rc = $dbread(2, clientid, c.dx10.rh, c.dx10.dt)
-rc = $dbremovedst(2, clientid, c.dx10.rh, c.dx10.dt)
-$infomsg9 = $infomsg9 + $format(rc, "remove record: 99, ")
-
-rc = $dbremovereg(2, clientid)
-$infomsg9 = $infomsg9 + $format(rc, "remove reg: 99")
-end lib-void-test
+'c.dx10.rh is h
+'c.dx10.dt is d
+'$dblock()
+'rc = $dbread(2, clientid, c.dx10.rh, c.dx10.dt)
+'rc = $dbremovedst(2, clientid, c.dx10.rh, c.dx10.dt)
+'$infomsg9 = $infomsg9 + $format(rc, "remove record: 99, ")
+'
+'rc = $dbremovereg(2, clientid)
+'$infomsg9 = $infomsg9 + $format(rc, "remove reg: 99")
+end lib-update-test

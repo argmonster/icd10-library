@@ -103,6 +103,9 @@ doc-id is x
 rc = $putirmsdoc(doc-id,temp_file,2,clientid,irms_form,"DX10","1869",
          create-date, create-time, "text/x-cmhc-snapshot", doc-desc)
 
+'strip the extension
+doc-id = $parse(doc-id, 1, ".")
+
 $infomsg1 = $format(doc-id, "doc id: ~~~~~~~~~~~~~~~~~~~~~")
 
 rm-file is x
@@ -157,8 +160,9 @@ isConverted      = "N"
     doc-id,
     isConverted)
 
- $infomsg9 = $infomsg9 + $format(rc, "putClientDx rc: 99, ")
+ $infomsg9 = $infomsg9 + $format(rc, dx_rec, "putClientDx rc: 99, 99999999999")
 
+ $trace("on,path", "$SYS_/P/dx.trace")
  rc = lib-dx:voidClientDx(clientid, dx_rec, "10/20/2015")
 
  $infomsg9 = $infomsg9 + $format(rc, "voidClientDx rc: 99, ")
@@ -168,6 +172,7 @@ if dx_rec !dp then
 else
    $infomsg3 = "Got a dx uid passed"
 endif
+$trace("off")
 
 'clean up the reg
 'c.dx10.rh is h
