@@ -1200,10 +1200,6 @@ updateClientdx = $dbreaduid(dx_rec, 2, clientid, dx10_dstlist)
 
 'Void it off as changed
 void_reason = "This record was changed by staff id " + staffid + ". "
-if c_dx10_snapid dp then
-   void_reason += "Please see snap id: " + c_dx10_snapid + " for the updates."
-endif
-'void_code = "9010"
 
 voiddxdoc(c.dx10.snapid, void_reason, void_code, c_dx10_snapid)
 
