@@ -359,6 +359,13 @@ index                is b
     isConverted = "N"
  endif
 
+if recentrydate !dp
+	recentrydate = $today
+endif
+if recentrytime !dp
+	recentrytime = $timenow
+endif
+
  if c_dx10_comment dp
   bad_char_index = 0
   do while bad_char_index++ < $maxarray(bad_char[])
@@ -370,6 +377,7 @@ index                is b
 
  c.dx10.rh[effd]  = effdate
  c.dx10.staff     = staffid
+ c.dx10.entstaff  = $operstaffid
  c.dx10.dt        = recdate
  c.dx10.time      = rectime
  c.dx10.entdt     = recentrydate
@@ -2149,3 +2157,671 @@ function ICD10_Desc(UniqID,ICD10_9) is x
   ICD10_Desc = $funcname + " Error"
  endif
 end ICD10_Desc
+
+function ICD_Desc_lookup(UniqID,ICD10_9) is x
+'Get diagnosis description based on diagnosis code - retrieve first active record 
+ UniqID  is x
+ ICD10_9 is x
+ o_sql   is x
+ results is x
+ rc      is i
+ {"LIB-freetds"}setDSN(dsn)
+ select ICD10_9
+  case "ICD10"  o_sql = "select [ICD-10_Description] from " + ICD10_table + " where [ICD-10_Code] = '" + uniqid + "' and EndDt is null" 
+  case "ICD9"   o_sql = "select [ICD-9_Description] from " + ICD9_table + " where [ICD-9_Code] = '" + uniqid + "' and EndDt is null" 
+  case "ICD109" o_sql = "select [ICD-10_Description] from " + ICD9_table + " where [ICD-10_Code] = '" + uniqid + "' and EndDt is null" 
+  case other    o_sql = "select [ICD-10_Description] from " + ICD10_table + " where [ICD-10_Code] = '" + uniqid + "' and EndDt is null" 
+ endselect
+ rc = {"LIB-freetds"}q(o_sql, results)
+ results = $replace("|","",results)
+ ICD_Desc_Lookup = results
+end ICD_Desc_Lookup
+
+function DXGet(parmfile,option,client,DiagsReturned[,]) is null
+
+'Get diagnosis history and pass back a two dimensional array	
+'Author Eric Roberts @ StarCare 	Date 10/20/15
+'the parmfile passed will determine if ICD9, ICD10 or both diagnosis tables are read
+
+'**  Fields passed in from parmfile DX10HIS
+'*** MAP fields are actually the DST name for the appropriate "value" in each centers specific ICD 9 diagnosis table
+MAP_DX_RH				IS x 	'Record header name
+MAP_DX_DATE				is x	'Diagnosis date 
+MAP_DX_STAF				IS X	'Diagnosis entry made by staff
+MAP_DX_ID				is x	'Diagnosed by 
+MAP_DX_AXIS4ECO			is x
+MAP_DX_AXIS4EDU			is x
+MAP_DX_AXIS4HEA			is x
+MAP_DX_AXIS4HOU			is x
+MAP_DX_AXIS4LEG			is x
+MAP_DX_AXIS4OCC			is x
+MAP_DX_AXIS4SUP			is x
+MAP_DX_AXIS4OTH			is x
+MAP_DX_AXIS4SOC			is x
+MAP_DX_ACT				is x	'Action taken
+MAP_DX_PRI				is x
+'Axis I
+MAP_DX_A11				IS X
+MAP_DX_A12				IS X
+MAP_DX_A13				IS X
+MAP_DX_A14				IS X
+'Axis II
+MAP_DX_A21				IS X
+MAP_DX_A22				IS X
+MAP_DX_A23				IS X
+MAP_DX_A24				IS X
+'Axis III
+MAP_DX_A31				IS X
+MAP_DX_A32				IS X
+'Axis IV
+MAP_DX_A41 				IS X
+MAP_DX_A42   	        IS X
+MAP_DX_A43				IS X
+MAP_DX_A44				IS X
+MAP_DX_A45				IS X
+MAP_DX_A46				IS X
+MAP_DX_A47				IS X
+MAP_DX_A48				IS X
+MAP_DX_A49				IS X
+MAP_DX_A410				IS X
+'Axis V
+MAP_DX_A51				is X
+MAP_DX_A52				IS X
+'AAMD ABL
+MAP_DX_ABLCUR			IS X
+MAP_DX_ABLPOT			IS X
+'**  DCTs used for descriptions
+dct.axis.3				is x		'Axis 3	 
+dct.axis.4				is x	   	'Axis 4
+dct.axis.5				is x	  	'Axis 5
+dct.abl.table			is x		'ABL Table
+dct.act.tak				is x		'Action Taken
+dspwhaticd				is x		'Display ICD(9), (10) or (A)ll - passed in from parmfile DX10HIS, DX10HIS9 or DX10HIS0  
+'** fields used in program
+dx.rec.hd				IS H
+dx.date					is d
+dx.staf					IS X
+dx.id					is x
+dx.axis4eco				is x
+dx.axis4edu				is x
+dx.axis4hea				is x
+dx.axis4hou				is x
+dx.axis4leg				is x
+dx.axis4occ				is x
+dx.axis4sup				is x
+dx.axis4oth				is x
+dx.axis4soc				is x
+dx.act					is x
+dx.pri					is x
+'Axis I
+axis.11					IS X
+axis.12					IS X
+axis.13					IS X
+axis.14					IS X
+'Axis II
+axis.21					IS X
+axis.22					IS X
+axis.23					IS X
+axis.24					IS X
+'Axis III
+axis.31					IS X
+axis.32					IS X
+'Axis IV
+axis.41 				IS X
+axis.42   	    	    IS X
+axis.43					IS X
+axis.44					IS X
+axis.45					IS X
+axis.46					IS X
+axis.47					IS X
+axis.48					IS X
+axis.49					IS X
+axis.410				IS X
+'Axis V
+axis5.1					is X
+axis5.2					IS X
+'AAMD ABL
+dx.ablcur				IS X
+dx.ablpot				IS X
+passclient 				is x	'pass client and diagnosis date 12345|MMDDYYYY
+'** array for returning data
+DiagsReturned[,]        is x
+parmfile				is x
+option					is x
+uid						is x
+
+lib-dx					is b
+row						is i
+col						is i
+rc						is i
+client					is x
+
+$allowupdate(DiagsReturned[,])
+
+ICD9_Table = "[t_ICD-10_ICD-9_with_GEM_AXIS]"
+ICD10_Table = "[t_ICD-10_ICD-10_with_GEM_AXIS]"
+
+if parmfile !dp			'Just in case default
+parmfile = "DX10HIS"
+endif
+
+getparm(parmfile)
+getoption(option)
+
+rc = $loadlib(lib-dx, "lib_DX10")
+lib-dx:Set_Sql(o_user, o_pass, o_ds, o_db, icd10_table, icd9_table)
+
+'**  load dst names from mapped fields set in parmfile
+$setvarname(dx.rec.hd,MAP_DX_RH)
+$setvarname(dx.date,MAP_DX_DATE)	
+$setvarname(dx.staf,MAP_DX_STAF)					 
+$setvarname(dx.id,MAP_DX_ID)					 
+$setvarname(dx.axis4eco,MAP_DX_AXIS4ECO)				 
+$setvarname(dx.axis4edu,MAP_DX_AXIS4EDU)				 
+$setvarname(dx.axis4hea,MAP_DX_AXIS4HEA)				 
+$setvarname(dx.axis4hou,MAP_DX_AXIS4HOU)				 
+$setvarname(dx.axis4leg,MAP_DX_AXIS4LEG)				 
+$setvarname(dx.axis4occ,MAP_DX_AXIS4OCC)				 
+$setvarname(dx.axis4sup,MAP_DX_AXIS4SUP)				 
+$setvarname(dx.axis4oth,MAP_DX_AXIS4OTH)				 
+$setvarname(dx.axis4soc,MAP_DX_AXIS4SOC)				 
+$setvarname(dx.act,MAP_DX_ACT)	
+$setvarname(dx.pri,MAP_DX_PRI)				 
+'Axis I
+$setvarname(axis.11,MAP_DX_A11)					 
+$setvarname(axis.12,MAP_DX_A12)					 
+$setvarname(axis.13,MAP_DX_A13)					 
+$setvarname(axis.14,MAP_DX_A14)					 
+'Axis II
+$setvarname(axis.21,MAP_DX_A21)					 
+$setvarname(axis.22,MAP_DX_A22)					 
+$setvarname(axis.23,MAP_DX_A23)					 
+$setvarname(axis.24,MAP_DX_A24)					 
+'Axis III
+$setvarname(axis.31,MAP_DX_A31)					 
+$setvarname(axis.32,MAP_DX_A32)					 
+'Axis IV
+$setvarname(axis.41,MAP_DX_A41)			 
+$setvarname(axis.42,MAP_DX_A42)   	    	     
+$setvarname(axis.43,MAP_DX_A43)					 
+$setvarname(axis.44,MAP_DX_A44)					 
+$setvarname(axis.45,MAP_DX_A45)					 
+$setvarname(axis.46,MAP_DX_A46)					 
+$setvarname(axis.47,MAP_DX_A47)					 
+$setvarname(axis.48,MAP_DX_A48)					 
+$setvarname(axis.49,MAP_DX_A49)					 
+$setvarname(axis.410,MAP_DX_A410)				 
+'Axis V
+$setvarname(axis5.1,MAP_DX_A51)				 
+$setvarname(axis5.2,MAP_DX_A52)					 
+'AAMD ABL
+$setvarname(dx.ablcur,MAP_DX_ABLCUR)				 
+$setvarname(dx.ablpot,MAP_DX_ABLPOT)	
+
+if dspwhaticd !dp
+dspwhaticd = "A"			'Just in case default
+endif		 
+
+$clear(DiagsReturned[,],row,col)
+
+if dspwhaticd <> "9"	'If ICD9 only passed in parmfile - skip ICD10
+
+'READ CLIENT INFORMATION for ICD 10 diagnoses
+rc = $dbread(02,client,dx10_dstlist)
+
+do while rc < 2
+
+        if c.dx10.dt dp and c.dx10.dt >= "10/01/2015"
+
+				col = 0
+				DiagsReturned[++row,++col]   = c.dx10.staff		
+				DiagsReturned[row,++col]   = c.dx10.entstaff    
+				DiagsReturned[row,++col]  = "10"
+				DiagsReturned[row,++col]   = c.dx10.dt
+				DiagsReturned[row,++col] = c.dx10.icd10.1
+				DiagsReturned[row,++col] = lib-dx:10_Desc_lookup(c.dx10.uniq.1,"ICD10")
+				DiagsReturned[row,++col]    = c.dx10.dxcat.1 
+				DiagsReturned[row,++col] = c.dx10.legax.1
+				DiagsReturned[row,++col]  = c.dx10.a5.gaf		
+				DiagsReturned[row,++col] = c.dx10.pimary.ax
+                DiagsReturned[row,++col] = "Y" 								'First row for diagnosis record
+				DiagsReturned[row,++col] = c.dx10.rh[uid]
+				DiagsReturned[row,++col] = c.dx10.stat
+				col = 0
+				if c.dx10.icd10.2 dp 'and c.dx10.icd10.2 <> "NONE"
+					DiagsReturned[++row,++col]   = c.dx10.staff		
+					DiagsReturned[row,++col]   = c.dx10.entstaff    
+					DiagsReturned[row,++col]  = "10"
+					DiagsReturned[row,++col]   = c.dx10.dt
+					DiagsReturned[row,++col] = c.dx10.icd10.2
+					DiagsReturned[row,++col] = lib-dx:10_Desc_lookup(c.dx10.uniq.2,"ICD10")
+					DiagsReturned[row,++col]    = c.dx10.dxcat.2 
+					DiagsReturned[row,++col] = c.dx10.legax.2
+					DiagsReturned[row,++col]  = c.dx10.a5.gaf		
+					DiagsReturned[row,++col] = c.dx10.pimary.ax
+					DiagsReturned[row,++col] = "N"
+					DiagsReturned[row,++col] = c.dx10.rh[uid]
+					DiagsReturned[row,++col] = c.dx10.stat
+				endif
+				col = 0
+				if c.dx10.icd10.3 dp 'and c.dx10.icd10.3 <> "NONE"
+					DiagsReturned[++row,++col]   = c.dx10.staff		
+					DiagsReturned[row,++col]   = c.dx10.entstaff    
+					DiagsReturned[row,++col]  = "10"
+					DiagsReturned[row,++col]   = c.dx10.dt
+					DiagsReturned[row,++col] = c.dx10.icd10.3
+					DiagsReturned[row,++col] = lib-dx:10_Desc_lookup(c.dx10.uniq.3,"ICD10")
+					DiagsReturned[row,++col]    = c.dx10.dxcat.3 
+					DiagsReturned[row,++col] = c.dx10.legax.3
+					DiagsReturned[row,++col]  = c.dx10.a5.gaf		
+					DiagsReturned[row,++col] = c.dx10.pimary.ax
+					DiagsReturned[row,++col] = "N"
+					DiagsReturned[row,++col] = c.dx10.rh[uid]
+					DiagsReturned[row,++col] = c.dx10.stat
+				endif				
+				col = 0
+				if c.dx10.icd10.4 dp 'and c.dx10.icd10.4 <> "NONE"
+					DiagsReturned[++row,++col]   = c.dx10.staff		
+					DiagsReturned[row,++col]   = c.dx10.entstaff    
+					DiagsReturned[row,++col]  = "10"
+					DiagsReturned[row,++col]   = c.dx10.dt
+					DiagsReturned[row,++col] = c.dx10.icd10.4
+					DiagsReturned[row,++col] = lib-dx:10_Desc_lookup(c.dx10.uniq.4,"ICD10")
+					DiagsReturned[row,++col]    = c.dx10.dxcat.4 
+					DiagsReturned[row,++col] = c.dx10.legax.4
+					DiagsReturned[row,++col]  = c.dx10.a5.gaf		
+					DiagsReturned[row,++col] = c.dx10.pimary.ax
+					DiagsReturned[row,++col] = "N"
+					DiagsReturned[row,++col] = c.dx10.rh[uid]
+					DiagsReturned[row,++col] = c.dx10.stat
+				endif		
+				col = 0
+				if c.dx10.icd10.5 dp 'and c.dx10.icd10.5 <> "NONE"
+					DiagsReturned[++row,++col]   = c.dx10.staff		
+					DiagsReturned[row,++col]   = c.dx10.entstaff    
+					DiagsReturned[row,++col]  = "10"
+					DiagsReturned[row,++col]   = c.dx10.dt
+					DiagsReturned[row,++col] = c.dx10.icd10.5
+					DiagsReturned[row,++col] = lib-dx:10_Desc_lookup(c.dx10.uniq.5,"ICD10")
+					DiagsReturned[row,++col]    = c.dx10.dxcat.5 
+					DiagsReturned[row,++col] = c.dx10.legax.5
+					DiagsReturned[row,++col]  = c.dx10.a5.gaf		
+					DiagsReturned[row,++col] = c.dx10.pimary.ax
+					DiagsReturned[row,++col] = "N"
+					DiagsReturned[row,++col] = c.dx10.rh[uid]
+					DiagsReturned[row,++col] = c.dx10.stat
+				endif
+				col = 0
+				if c.dx10.icd10.6 dp 'and c.dx10.icd10.6 <> "NONE"
+					DiagsReturned[++row,++col]   = c.dx10.staff		
+					DiagsReturned[row,++col]   = c.dx10.entstaff    
+					DiagsReturned[row,++col]  = "10"
+					DiagsReturned[row,++col]   = c.dx10.dt
+					DiagsReturned[row,++col] = c.dx10.icd10.6
+					DiagsReturned[row,++col] = lib-dx:10_Desc_lookup(c.dx10.uniq.6,"ICD10")
+					DiagsReturned[row,++col]    = c.dx10.dxcat.6 
+					DiagsReturned[row,++col] = c.dx10.legax.6
+					DiagsReturned[row,++col]  = c.dx10.a5.gaf		
+					DiagsReturned[row,++col] = c.dx10.pimary.ax
+					DiagsReturned[row,++col] = "N"
+					DiagsReturned[row,++col] = c.dx10.rh[uid]
+					DiagsReturned[row,++col] = c.dx10.stat
+				endif
+				col = 0
+				if c.dx10.icd10.7 dp 'and c.dx10.icd10.7 <> "NONE"
+					DiagsReturned[++row,++col]   = c.dx10.staff		
+					DiagsReturned[row,++col]   = c.dx10.entstaff    
+					DiagsReturned[row,++col]  = "10"
+					DiagsReturned[row,++col]   = c.dx10.dt
+					DiagsReturned[row,++col] = c.dx10.icd10.7
+					DiagsReturned[row,++col] = lib-dx:10_Desc_lookup(c.dx10.uniq.7,"ICD10")
+					DiagsReturned[row,++col]    = c.dx10.dxcat.7 
+					DiagsReturned[row,++col] = c.dx10.legax.7
+					DiagsReturned[row,++col]  = c.dx10.a5.gaf		
+					DiagsReturned[row,++col] = c.dx10.pimary.ax
+					DiagsReturned[row,++col] = "N"
+					DiagsReturned[row,++col] = c.dx10.rh[uid]
+					DiagsReturned[row,++col] = c.dx10.stat
+				endif
+				col = 0
+				if c.dx10.icd10.8 dp 'and c.dx10.icd10.8 <> "NONE"
+					DiagsReturned[++row,++col]   = c.dx10.staff		
+					DiagsReturned[row,++col]   = c.dx10.entstaff    
+					DiagsReturned[row,++col]  = "10"
+					DiagsReturned[row,++col]   = c.dx10.dt
+					DiagsReturned[row,++col] = c.dx10.icd10.8
+					DiagsReturned[row,++col] = lib-dx:10_Desc_lookup(c.dx10.uniq.8,"ICD10")
+					DiagsReturned[row,++col]    = c.dx10.dxcat.8 
+					DiagsReturned[row,++col] = c.dx10.legax.8
+					DiagsReturned[row,++col]  = c.dx10.a5.gaf		
+					DiagsReturned[row,++col] = c.dx10.pimary.ax
+					DiagsReturned[row,++col] = "N"
+					DiagsReturned[row,++col] = c.dx10.rh[uid]
+					DiagsReturned[row,++col] = c.dx10.stat
+				endif
+				col = 0
+				if c.dx10.icd10.9 dp 'and c.dx10.icd10.9 <> "NONE"
+					DiagsReturned[++row,++col]   = c.dx10.staff		
+					DiagsReturned[row,++col]   = c.dx10.entstaff    
+					DiagsReturned[row,++col]  = "10"
+					DiagsReturned[row,++col]   = c.dx10.dt
+					DiagsReturned[row,++col] = c.dx10.icd10.9
+					DiagsReturned[row,++col] = lib-dx:10_Desc_lookup(c.dx10.uniq.9,"ICD10")
+					DiagsReturned[row,++col]    = c.dx10.dxcat.9 
+					DiagsReturned[row,++col] = c.dx10.legax.9
+					DiagsReturned[row,++col]  = c.dx10.a5.gaf		
+					DiagsReturned[row,++col] = c.dx10.pimary.ax
+					DiagsReturned[row,++col] = "N"
+					DiagsReturned[row,++col] = c.dx10.rh[uid]
+					DiagsReturned[row,++col] = c.dx10.stat
+				endif
+				col = 0
+				if c.dx10.icd10.10 dp 'and c.dx10.icd10.10 <> "NONE"
+					DiagsReturned[++row,++col]   = c.dx10.staff		
+					DiagsReturned[row,++col]   = c.dx10.entstaff    
+					DiagsReturned[row,++col]  = "10"
+					DiagsReturned[row,++col]   = c.dx10.dt
+					DiagsReturned[row,++col] = c.dx10.icd10.10
+					DiagsReturned[row,++col] = lib-dx:10_Desc_lookup(c.dx10.uniq.1,"ICD10")
+					DiagsReturned[row,++col]    = c.dx10.dxcat.10 
+					DiagsReturned[row,++col] = c.dx10.legax.10
+					DiagsReturned[row,++col]  = c.dx10.a5.gaf		
+					DiagsReturned[row,++col] = c.dx10.pimary.ax
+					DiagsReturned[row,++col] = "N"
+					DiagsReturned[row,++col] = c.dx10.rh[uid]
+					DiagsReturned[row,++col] = c.dx10.stat
+				endif
+				col = 0
+				if c.dx10.icd10.11 dp 'and c.dx10.icd10.11 <> "NONE"
+					DiagsReturned[++row,++col]   = c.dx10.staff		
+					DiagsReturned[row,++col]   = c.dx10.entstaff    
+					DiagsReturned[row,++col]  = "10"
+					DiagsReturned[row,++col]   = c.dx10.dt
+					DiagsReturned[row,++col] = c.dx10.icd10.11
+					DiagsReturned[row,++col] = lib-dx:10_Desc_lookup(c.dx10.uniq.11,"ICD10")
+					DiagsReturned[row,++col]    = c.dx10.dxcat.11 
+					DiagsReturned[row,++col] = c.dx10.legax.11
+					DiagsReturned[row,++col]  = c.dx10.a5.gaf		
+					DiagsReturned[row,++col] = c.dx10.pimary.ax
+					DiagsReturned[row,++col] = "N"
+					DiagsReturned[row,++col] = c.dx10.rh[uid]
+					DiagsReturned[row,++col] = c.dx10.stat
+				endif
+				col = 0
+				if c.dx10.icd10.12 dp 'and c.dx10.icd10.12 <> "NONE"
+					DiagsReturned[++row,++col]   = c.dx10.staff		
+					DiagsReturned[row,++col]   = c.dx10.entstaff    
+					DiagsReturned[row,++col]  = "10"
+					DiagsReturned[row,++col]   = c.dx10.dt
+					DiagsReturned[row,++col] = c.dx10.icd10.12
+					DiagsReturned[row,++col] = lib-dx:10_Desc_lookup(c.dx10.uniq.12,"ICD10")
+					DiagsReturned[row,++col]    = c.dx10.dxcat.12 
+					DiagsReturned[row,++col] = c.dx10.legax.12
+					DiagsReturned[row,++col]  = c.dx10.a5.gaf		
+					DiagsReturned[row,++col] = c.dx10.pimary.ax
+					DiagsReturned[row,++col] = "N"
+					DiagsReturned[row,++col] = c.dx10.rh[uid]
+					DiagsReturned[row,++col] = c.dx10.stat
+				endif
+				col = 0
+				if c.dx10.icd10.13 dp 'and c.dx10.icd10.13 <> "NONE"
+					DiagsReturned[++row,++col]   = c.dx10.staff		
+					DiagsReturned[row,++col]   = c.dx10.entstaff    
+					DiagsReturned[row,++col]  = "10"
+					DiagsReturned[row,++col]   = c.dx10.dt
+					DiagsReturned[row,++col] = c.dx10.icd10.13
+					DiagsReturned[row,++col] = lib-dx:10_Desc_lookup(c.dx10.uniq.13,"ICD10")
+					DiagsReturned[row,++col]    = c.dx10.dxcat.13 
+					DiagsReturned[row,++col] = c.dx10.legax.13
+					DiagsReturned[row,++col]  = c.dx10.a5.gaf		
+					DiagsReturned[row,++col] = c.dx10.pimary.ax
+					DiagsReturned[row,++col] = "N"
+					DiagsReturned[row,++col] = c.dx10.rh[uid]
+					DiagsReturned[row,++col] = c.dx10.stat
+				endif
+				col = 0
+				if c.dx10.icd10.14 dp 'and c.dx10.icd10.14 <> "NONE"
+					DiagsReturned[++row,++col]   = c.dx10.staff		
+					DiagsReturned[row,++col]   = c.dx10.entstaff    
+					DiagsReturned[row,++col]  = "10"
+					DiagsReturned[row,++col]   = c.dx10.dt
+					DiagsReturned[row,++col] = c.dx10.icd10.14
+					DiagsReturned[row,++col] = lib-dx:10_Desc_lookup(c.dx10.uniq.14,"ICD10")
+					DiagsReturned[row,++col]    = c.dx10.dxcat.14 
+					DiagsReturned[row,++col] = c.dx10.legax.14
+					DiagsReturned[row,++col]  = c.dx10.a5.gaf		
+					DiagsReturned[row,++col] = c.dx10.pimary.ax
+					DiagsReturned[row,++col] = "N"
+					DiagsReturned[row,++col] = c.dx10.rh[uid]
+					DiagsReturned[row,++col] = c.dx10.stat
+				endif
+				col = 0
+				if c.dx10.icd10.15 dp 'and c.dx10.icd10.15 <> "NONE"
+					DiagsReturned[++row,++col]   = c.dx10.staff		
+					DiagsReturned[row,++col]   = c.dx10.entstaff    
+					DiagsReturned[row,++col]  = "10"
+					DiagsReturned[row,++col]   = c.dx10.dt
+					DiagsReturned[row,++col] = c.dx10.icd10.15
+					DiagsReturned[row,++col] = lib-dx:10_Desc_lookup(c.dx10.uniq.15,"ICD10")
+					DiagsReturned[row,++col]    = c.dx10.dxcat.15 
+					DiagsReturned[row,++col] = c.dx10.legax.15
+					DiagsReturned[row,++col]  = c.dx10.a5.gaf		
+					DiagsReturned[row,++col] = c.dx10.pimary.ax
+					DiagsReturned[row,++col] = "N"
+					DiagsReturned[row,++col] = c.dx10.rh[uid]
+					DiagsReturned[row,++col] = c.dx10.stat
+				endif
+				col = 0
+				if c.dx10.icd10.16 dp 'and c.dx10.icd10.16 <> "NONE"
+					DiagsReturned[++row,++col]   = c.dx10.staff		
+					DiagsReturned[row,++col]   = c.dx10.entstaff    
+					DiagsReturned[row,++col]  = "10"
+					DiagsReturned[row,++col]   = c.dx10.dt
+					DiagsReturned[row,++col] = c.dx10.icd10.16
+					DiagsReturned[row,++col] = lib-dx:10_Desc_lookup(c.dx10.uniq.16,"ICD10")
+					DiagsReturned[row,++col]    = c.dx10.dxcat.16 
+					DiagsReturned[row,++col] = c.dx10.legax.16
+					DiagsReturned[row,++col]  = c.dx10.a5.gaf		
+					DiagsReturned[row,++col] = c.dx10.pimary.ax
+					DiagsReturned[row,++col] = "N"
+					DiagsReturned[row,++col] = c.dx10.rh[uid]
+					DiagsReturned[row,++col] = c.dx10.stat
+				endif
+		endif
+
+		rc = $dbreadnextdst(02,client,dx10_dstlist)
+
+enddo
+
+endif	'dspwhaticd <> "9"
+
+if dspwhaticd <> "10" 	'If ICD10 only passed in parmfile - skip ICD9
+
+'READ CLIENT INFORMATION for ICD 9 diagnoses - ** dst names set in parmfile DX10HIS
+$dblock()		'This forces the UID to be retreived
+    rc = $dbread(02,client,dx.rec.hd,dx.date,dx.staf,dx.id,dx.act,dx.pri,
+	axis.11,axis.12,axis.13,axis.14,axis.21,axis.22,axis.23,axis.24,axis.31,axis.32,axis5.1,axis5.2,
+	dx.ablcur,dx.ablpot,dx.axis4eco,dx.axis4edu,dx.axis4hea,dx.axis4hou,dx.axis4leg,dx.axis4occ,dx.axis4sup,dx.axis4oth,dx.axis4soc)
+$dbunlock()
+
+do while rc < 2
+
+        if dx.date dp and dx.date < "10/01/2015"
+
+				col = 0
+ 				DiagsReturned[++row,++col]   = dx.id		
+				DiagsReturned[row,++col]   = dx.staf       
+				DiagsReturned[row,++col]  = "9"
+				DiagsReturned[row,++col]   = dx.date
+				DiagsReturned[row,++col] = axis.11
+				DiagsReturned[row,++col] = lib-dx:ICD_Desc_lookup(axis.11,"ICD9")
+				DiagsReturned[row,++col]    = dx.act
+				DiagsReturned[row,++col] = "1"
+			    DiagsReturned[row,++col] = axis5.1 		
+				DiagsReturned[row,++col] = dx.pri
+				DiagsReturned[row,++col] = "Y" 							'First row for diagnosis record
+				DiagsReturned[row,++col] = dx.rec.hd[uid]
+				DiagsReturned[row,++col] = "A"
+				col = 0
+				if axis.12 dp  and axis.12 <> "NONE"
+					DiagsReturned[++row,++col]   = dx.id
+					DiagsReturned[row,++col]   = dx.staf 
+					DiagsReturned[row,++col]  = "9"
+					DiagsReturned[row,++col]   = dx.date
+					DiagsReturned[row,++col] = axis.12
+					DiagsReturned[row,++col] = lib-dx:ICD_Desc_lookup(axis.12,"ICD9")
+					DiagsReturned[row,++col]    = dx.act
+					DiagsReturned[row,++col] = "1"
+					DiagsReturned[row,++col] = axis5.1
+					DiagsReturned[row,++col] = dx.pri
+					DiagsReturned[row,++col] = "N"
+					DiagsReturned[row,++col] = dx.rec.hd[uid]
+					DiagsReturned[row,++col] = "A"
+				endif	
+ 				col = 0
+				if axis.13 dp and axis.13 <> "NONE"
+					DiagsReturned[++row,++col]   = dx.id
+					DiagsReturned[row,++col]   = dx.staf 
+					DiagsReturned[row,++col]  = "9"
+					DiagsReturned[row,++col]   = dx.date
+					DiagsReturned[row,++col] = axis.13
+					DiagsReturned[row,++col] = lib-dx:ICD_Desc_lookup(axis.13,"ICD9")
+					DiagsReturned[row,++col]    = dx.act
+					DiagsReturned[row,++col] = "1"
+					DiagsReturned[row,++col] = axis5.1
+					DiagsReturned[row,++col] = dx.pri
+					DiagsReturned[row,++col] = "N"
+					DiagsReturned[row,++col] = dx.rec.hd[uid]
+					DiagsReturned[row,++col] = "A"
+				endif
+				col = 0
+				if axis.14 dp and axis.14 <> "NONE"
+					DiagsReturned[++row,++col]   = dx.id
+					DiagsReturned[row,++col]   = dx.staf 
+					DiagsReturned[row,++col]  = "9"
+					DiagsReturned[row,++col]   = dx.date
+					DiagsReturned[row,++col] = axis.14
+					DiagsReturned[row,++col] = lib-dx:ICD_Desc_lookup(axis.14,"ICD9")
+					DiagsReturned[row,++col]    = dx.act
+					DiagsReturned[row,++col] = "1"
+					DiagsReturned[row,++col] = axis5.1
+					DiagsReturned[row,++col] = dx.pri
+					DiagsReturned[row,++col] = "N"
+					DiagsReturned[row,++col] = dx.rec.hd[uid]
+					DiagsReturned[row,++col] = "A"
+				endif
+				col = 0
+				if axis.21 dp and axis.21 <> "NONE"
+					DiagsReturned[++row,++col]   = dx.id
+					DiagsReturned[row,++col]   = dx.staf 
+					DiagsReturned[row,++col]  = "9"
+					DiagsReturned[row,++col]   = dx.date
+					DiagsReturned[row,++col] = axis.21
+					DiagsReturned[row,++col] = lib-dx:ICD_Desc_lookup(axis.21,"ICD9")
+					DiagsReturned[row,++col]    = dx.act
+					DiagsReturned[row,++col] = "1"
+					DiagsReturned[row,++col] = axis5.1
+					DiagsReturned[row,++col] = dx.pri
+					DiagsReturned[row,++col] = "N"
+					DiagsReturned[row,++col] = dx.rec.hd[uid]
+					DiagsReturned[row,++col] = "A"
+				endif
+				col = 0
+				if axis.22 dp and axis.22 <> "NONE"
+					DiagsReturned[++row,++col]   = dx.id
+					DiagsReturned[row,++col]   = dx.staf 
+					DiagsReturned[row,++col]  = "9"
+					DiagsReturned[row,++col]   = dx.date
+					DiagsReturned[row,++col] = axis.22
+					DiagsReturned[row,++col] = lib-dx:ICD_Desc_lookup(axis.22,"ICD9")
+					DiagsReturned[row,++col]    = dx.act
+					DiagsReturned[row,++col] = "1"
+					DiagsReturned[row,++col] = axis5.1
+					DiagsReturned[row,++col] = dx.pri
+					DiagsReturned[row,++col] = "N"
+					DiagsReturned[row,++col] = dx.rec.hd[uid]
+					DiagsReturned[row,++col] = "A"
+				endif
+				col = 0
+				if axis.23 dp and axis.23 <> "NONE"
+					DiagsReturned[++row,++col]   = dx.id
+					DiagsReturned[row,++col]   = dx.staf 
+					DiagsReturned[row,++col]  = "9"
+					DiagsReturned[row,++col]   = dx.date
+					DiagsReturned[row,++col] = axis.23
+					DiagsReturned[row,++col] = lib-dx:ICD_Desc_lookup(axis.23,"ICD9")
+					DiagsReturned[row,++col]    = dx.act
+					DiagsReturned[row,++col] = "1"
+					DiagsReturned[row,++col] = axis5.1
+					DiagsReturned[row,++col] = dx.pri
+					DiagsReturned[row,++col] = "N"	
+					DiagsReturned[row,++col] = dx.rec.hd[uid]
+					DiagsReturned[row,++col] = "A"				
+				endif
+ 				col = 0
+				if axis.24 dp and axis.24 <> "NONE"
+					DiagsReturned[++row,++col]   = dx.id
+					DiagsReturned[row,++col]   = dx.staf 
+					DiagsReturned[row,++col]  = "9"
+					DiagsReturned[row,++col]   = dx.date
+					DiagsReturned[row,++col] = axis.24
+					DiagsReturned[row,++col] = lib-dx:ICD_Desc_lookup(axis.24,"ICD9")
+					DiagsReturned[row,++col]    = dx.act
+					DiagsReturned[row,++col] = "1"
+					DiagsReturned[row,++col] = axis5.1
+					DiagsReturned[row,++col] = dx.pri
+					DiagsReturned[row,++col] = "N"
+					DiagsReturned[row,++col] = dx.rec.hd[uid]
+					DiagsReturned[row,++col] = "A"
+				endif
+ 				col = 0
+				if axis.31 dp and axis.31 <> "NONE"
+					DiagsReturned[++row,++col]   = dx.id
+					DiagsReturned[row,++col]   = dx.staf 
+					DiagsReturned[row,++col]  = "9"
+					DiagsReturned[row,++col]   = dx.date
+					DiagsReturned[row,++col] = axis.31
+					DiagsReturned[row,++col] = lib-dx:ICD_Desc_lookup(axis.31,"ICD9")
+					DiagsReturned[row,++col]    = dx.act
+					DiagsReturned[row,++col] = "1"
+					DiagsReturned[row,++col] = axis5.1
+					DiagsReturned[row,++col] = dx.pri
+					DiagsReturned[row,++col] = "N"
+					DiagsReturned[row,++col] = dx.rec.hd[uid]
+					DiagsReturned[row,++col] = "A"
+				endif
+ 				col = 0
+				if axis.32 dp and axis.32 <> "NONE"
+					DiagsReturned[++row,++col]   = dx.id
+					DiagsReturned[row,++col]   = dx.staf 
+					DiagsReturned[row,++col]  = "9"
+					DiagsReturned[row,++col]   = dx.date
+					DiagsReturned[row,++col] = axis.32
+					DiagsReturned[row,++col] = lib-dx:ICD_Desc_lookup(axis.32,"ICD9")
+					DiagsReturned[row,++col]    = dx.act
+					DiagsReturned[row,++col] = "1"
+					DiagsReturned[row,++col] = axis5.1
+					DiagsReturned[row,++col] = dx.pri
+					DiagsReturned[row,++col] = "N"
+					DiagsReturned[row,++col] = dx.rec.hd[uid]
+					DiagsReturned[row,++col] = "A"
+				endif
+		endif
+
+$dblock()
+rc = $dbreadnextdst(02,client,dx.rec.hd,dx.date,dx.staf,dx.id,dx.act,dx.pri,
+	axis.11,axis.12,axis.13,axis.14,axis.21,axis.22,axis.23,axis.24,axis.31,axis.32,axis5.1,axis5.2,
+	dx.ablcur,dx.ablpot,dx.axis4eco,dx.axis4edu,dx.axis4hea,dx.axis4hou,dx.axis4leg,dx.axis4occ,dx.axis4sup,dx.axis4oth,dx.axis4soc)
+$dbunlock()
+
+enddo
+
+endif	'dspwhaticd <> "10"
+
+'DXGet = DiagsReturned[,]
+
+end DXGet
+
+%include inc_GetParm
+%include inc_GetOption
+
